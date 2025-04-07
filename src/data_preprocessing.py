@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
-from transformers import BertTokenizer
+from transformers import AutoTokenizer, BertTokenizer
 
 
 class SummaryDataset(Dataset):
@@ -25,9 +25,18 @@ class SummaryDataset(Dataset):
         return len(self.labels)
     
     def __getitem__(self, idx):
-        item = {key: val[idx].clone().detach() for key, val in self.encodings.items()}
-        item['label'] = torch.tensor(self.labels[idx], dtype=torch.long)
-        return item
+        # Get encoded inputs for this index
+        input_ids = self.encodings['input_ids'][idx]
+        attention_mask = self.encodings['attention_mask'][idx]
+        
+        # Convert label to tensor
+        label = torch.tensor(self.labels[idx], dtype=torch.long)
+        
+        return {
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'label': label
+        }
 
 def load_and_preprocess_data(data_path, test_size=0.2, random_state=42):
     """
@@ -71,42 +80,33 @@ def load_and_preprocess_data(data_path, test_size=0.2, random_state=42):
     
     return train_texts, val_texts, train_labels, val_labels, label_encoder
 
-def prepare_datasets(train_texts, val_texts, train_labels, val_labels, model_name='bert-base-multilingual-cased'):
+def prepare_datasets(train_texts, val_texts, train_labels, val_labels, pretrained_model='bert-base-multilingual-cased'):
     """
     Prepare PyTorch datasets for training and validation.
     
     Args:
-        train_texts: Training texts
-        val_texts: Validation texts
-        train_labels: Training labels
-        val_labels: Validation labels
-        model_name: Pre-trained model name
+        train_texts: List of training texts
+        val_texts: List of validation texts
+        train_labels: List of training labels
+        val_labels: List of validation labels
+        pretrained_model: Pre-trained model name
         
     Returns:
-        train_dataset, val_dataset, tokenizer
+        train_dataset: Training dataset
+        val_dataset: Validation dataset
     """
     # Load tokenizer
-    try:
-        print(f"Loading tokenizer for {model_name}...")
-        from transformers import BertTokenizer
-        tokenizer = BertTokenizer.from_pretrained(model_name)
-        print("Tokenizer loaded successfully")
-    except Exception as e:
-        print(f"Error loading tokenizer: {str(e)}")
-        # Fall back to basic BERT tokenizer if there's an issue
-        print("Falling back to basic tokenizer implementation")
-        from transformers import BertTokenizer
-        tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased', 
-                                                 do_lower_case=False,
-                                                 local_files_only=False)
+    print(f"Loading tokenizer for {pretrained_model}...")
+    tokenizer = BertTokenizer.from_pretrained(pretrained_model)
+    print("Tokenizer loaded successfully")
     
-    # Tokenize texts
+    # Tokenize texts and convert to tensors
     print("Tokenizing training texts...")
     train_encodings = tokenizer(
         train_texts, 
         truncation=True, 
-        padding='max_length', 
-        max_length=128,
+        padding=True, 
+        max_length=256, 
         return_tensors='pt'
     )
     
@@ -114,16 +114,16 @@ def prepare_datasets(train_texts, val_texts, train_labels, val_labels, model_nam
     val_encodings = tokenizer(
         val_texts, 
         truncation=True, 
-        padding='max_length', 
-        max_length=128,
+        padding=True, 
+        max_length=256, 
         return_tensors='pt'
     )
     
-    # Create datasets
+    # Convert to PyTorch datasets
     train_dataset = SummaryDataset(train_encodings, train_labels)
     val_dataset = SummaryDataset(val_encodings, val_labels)
     
-    return train_dataset, val_dataset, tokenizer
+    return train_dataset, val_dataset
 
 def save_label_encoder(label_encoder, output_dir):
     """

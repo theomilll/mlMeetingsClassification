@@ -245,6 +245,11 @@ def classify_with_confidence():
             "category1": 0.8,
             "category2": 0.1,
             ...
+        },
+        "metadata": {
+            "threshold_met": true/false,
+            "is_confident": true/false,
+            "top_margin": 0.x
         }
     }
     """
@@ -272,10 +277,22 @@ def classify_with_confidence():
     
     # Classify summary
     try:
-        category, confidence = classifier.classify(summary, return_confidence=True)
+        category, confidence = classifier.classify(summary, return_confidence=True, confidence_threshold=0.3)
+        
+        # Calculate additional metadata
+        sorted_confidence = sorted(confidence.items(), key=lambda x: x[1], reverse=True)
+        top_confidence = sorted_confidence[0][1]
+        
+        metadata = {
+            "threshold_met": top_confidence >= 0.3,
+            "is_confident": top_confidence >= 0.3,
+            "top_margin": sorted_confidence[0][1] - sorted_confidence[1][1] if len(sorted_confidence) > 1 else 1.0
+        }
+        
         return jsonify({
             "category": category,
-            "confidence": confidence
+            "confidence": confidence,
+            "metadata": metadata
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

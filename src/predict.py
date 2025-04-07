@@ -68,13 +68,14 @@ class SummaryClassifier:
             logger.error(f"Label encoder not found in any expected location")
             raise FileNotFoundError(f"Label encoder not found. Searched in: {', '.join(potential_paths)}")
     
-    def classify(self, text, return_confidence=False):
+    def classify(self, text, return_confidence=False, confidence_threshold=0.3):
         """
         Classify a text summary.
         
         Args:
             text: Text to classify
             return_confidence: Whether to return confidence scores
+            confidence_threshold: Minimum confidence needed to make a prediction
             
         Returns:
             Predicted category and optionally confidence scores
@@ -102,31 +103,44 @@ class SummaryClassifier:
             
             # Make prediction
             with torch.no_grad():
+                # Handle different model output formats
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                logits = outputs.logits
                 
-                # Get predicted class
-                _, predicted_idx = torch.max(logits, dim=1)
-                predicted_idx = predicted_idx.item()
+                # Check if outputs is a tuple/list or has a logits attribute
+                if hasattr(outputs, 'logits'):
+                    logits = outputs.logits
+                else:
+                    # Assume outputs are the logits directly
+                    logits = outputs
                 
-                # Check if the index is in our mapping
-                if predicted_idx not in self.idx_to_category:
-                    logger.error(f"Predicted index {predicted_idx} not found in label mapping")
-                    raise RuntimeError(f"Invalid prediction index: {predicted_idx}")
+                # Apply softmax to get probabilities
+                probabilities = torch.nn.functional.softmax(logits, dim=1)[0]
                 
+                # Create dictionary of category -> confidence
+                confidence = {}
+                for idx, prob in enumerate(probabilities):
+                    if idx in self.idx_to_category:
+                        category = self.idx_to_category[idx]
+                        confidence[category] = prob.item()
+                
+                # Get predicted class with highest confidence 
+                predicted_idx = torch.argmax(logits, dim=1).item()
                 predicted_category = self.idx_to_category[predicted_idx]
+                predicted_confidence = probabilities[predicted_idx].item()
+                
+                # If the highest confidence is below threshold, check if there's a
+                # significant difference between top categories
+                if predicted_confidence < confidence_threshold:
+                    # Sort confidences to find top 2
+                    sorted_confidence = sorted(confidence.items(), key=lambda x: x[1], reverse=True)
+                    
+                    # If it's very close between top categories, consider it ambiguous
+                    if len(sorted_confidence) >= 2:
+                        top_diff = sorted_confidence[0][1] - sorted_confidence[1][1]
+                        if top_diff < 0.05:  # Difference less than 5%
+                            logger.info(f"Low confidence prediction ({predicted_confidence:.4f}) with small margin ({top_diff:.4f})")
                 
                 if return_confidence:
-                    # Apply softmax to get probabilities
-                    probabilities = torch.nn.functional.softmax(logits, dim=1)[0]
-                    
-                    # Create dictionary of category -> confidence
-                    confidence = {}
-                    for idx, prob in enumerate(probabilities):
-                        if idx in self.idx_to_category:
-                            category = self.idx_to_category[idx]
-                            confidence[category] = prob.item()
-                    
                     return predicted_category, confidence
                 
                 return predicted_category
