@@ -1,11 +1,47 @@
 import logging
 import os
-
-import pandas as pd
 import torch
-
-from evaluate import load_label_encoder
 from model import load_model
+
+# Minimal load_label_encoder for inference (copied here to avoid importing evaluate.py or pandas)
+def load_label_encoder(encoder_path):
+    """
+    Load label encoder from file.
+    Args:
+        encoder_path: Path to label encoder CSV
+    Returns:
+        Label encoder dictionary
+    """
+    label_encoder = {}
+    col_order = None
+    with open(encoder_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or ',' not in line:
+                continue
+            # Detect header and column order
+            if 'category' in line.lower() and 'idx' in line.lower():
+                parts = [x.strip().lower() for x in line.split(',')]
+                if parts[0] == 'category' and parts[1] == 'idx':
+                    col_order = 'category_first'
+                elif parts[0] == 'idx' and parts[1] == 'category':
+                    col_order = 'idx_first'
+                continue
+            try:
+                a, b = line.split(',', 1)
+                if col_order == 'category_first':
+                    label_encoder[a] = int(b)
+                elif col_order == 'idx_first':
+                    label_encoder[b] = int(a)
+                else:
+                    # Try to guess by type
+                    if a.isdigit():
+                        label_encoder[b] = int(a)
+                    elif b.isdigit():
+                        label_encoder[a] = int(b)
+            except Exception:
+                continue
+    return label_encoder
 
 # Configure logging
 logging.basicConfig(
@@ -216,25 +252,15 @@ def classify_with_confidence(text, model_dir='./models/final'):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Classify a meeting summary")
+    parser = argparse.ArgumentParser(description="Classify a meeting summary. Only the most likely category will be shown.")
     parser.add_argument('text', type=str, help='Text to classify')
     parser.add_argument('--model_dir', type=str, default='./models/final',
                        help='Directory containing the model')
-    parser.add_argument('--confidence', action='store_true',
-                       help='Return confidence scores')
-    
     args = parser.parse_args()
-    
+
     try:
-        if args.confidence:
-            category, confidence = classify_with_confidence(args.text, args.model_dir)
-            print(f"Category: {category}")
-            print("Confidence scores:")
-            for cat, score in sorted(confidence.items(), key=lambda x: x[1], reverse=True):
-                print(f"  {cat}: {score:.4f}")
-        else:
-            category = classify_summary(args.text, args.model_dir)
-            print(f"Category: {category}")
+        category = classify_summary(args.text, args.model_dir)
+        print(f"Category: {category}")
     except Exception as e:
         print(f"Error: {e}")
-        exit(1) 
+        exit(1)

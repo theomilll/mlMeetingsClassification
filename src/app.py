@@ -1,64 +1,12 @@
-import argparse
-import glob
-import json
-import os
-import sys
+# This file previously contained the Flask web interface for meeting summary categorization.
+# The project now supports only terminal/CLI-based classification via predict.py.
+# All web and Flask-related code has been removed for simplicity and to avoid unnecessary dependencies.
 
-from flask import Flask, jsonify, render_template_string, request
+# If you wish to classify meeting summaries, please use:
+#   python src/predict.py 'Seu texto aqui'
 
-from predict import SummaryClassifier
+# No executable code remains in this file.
 
-app = Flask(__name__)
-
-# Initialize classifier globally
-classifier = None
-
-# Simple HTML template for the homepage
-HOME_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Meeting Summary Categorization</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        textarea {
-            width: 100%;
-            min-height: 100px;
-            margin-bottom: 10px;
-            padding: 10px;
-        }
-        button {
-            padding: 10px 15px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .result {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f5f5f5;
-            border-radius: 5px;
-        }
-        .category {
-            font-weight: bold;
-            font-size: 18px;
-            margin-bottom: 10px;
-        }
-        .confidence {
-            margin-top: 10px;
-        }
-        .confidence-bar {
-            height: 20px;
-            background-color: #ddd;
             margin-bottom: 5px;
             position: relative;
         }
@@ -475,5 +423,3 @@ def main():
     # Run app
     app.run(host=args.host, port=args.port)
     
-if __name__ == "__main__":
-    main() 
